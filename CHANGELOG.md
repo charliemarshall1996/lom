@@ -10,3 +10,6 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 
 - Notebook to demonstrate preprocessing.
+- Optimize package
+- preprocessing_pos.py to optimize part-of-speech filtering in preprocessing.
+
