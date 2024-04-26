@@ -1,4 +1,5 @@
 
+import csv
 import json
 
 
@@ -10,3 +11,23 @@ def read_json_mapping(file):
 def txt_to_set(path: str) -> set[str]:
     with open(path, encoding='utf-8-sig', errors='ignore') as f:
         return {line for line in f.readlines()}
+
+
+def csv_to_json(file, output_file):
+    dct = {}
+    with open(file, encoding="utf-8-sig", errors="ignore") as f:
+        reader = csv.reader(f, delimiter=",")
+        next(reader)
+        for row in reader:
+            k = row[0]
+            v = row[1]
+            dct[k] = v
+
+        with open(output_file, encoding="utf-8-sig", mode="w", errors="ignore") as out:
+            json.dump(dct, out, indent=4)
+
+
+if __name__ == "__main__":
+    in_file = "C:\\Users\\charl.DESKTOP-1NGH5IT\\Documents\\GitHub\\lom\\data\\vocab\\dropped_gs.csv"
+    out_file = "C:\\Users\\charl.DESKTOP-1NGH5IT\\Documents\\GitHub\\lom\\data\\vocab\\dropped_gs.json"
+    csv_to_json(in_file, out_file)

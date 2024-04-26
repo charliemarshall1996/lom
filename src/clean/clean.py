@@ -41,7 +41,7 @@ def filter_pos(tokens, kept_pos):
 def map_vocab(tokens):
 
     contractions = read_json_mapping("./data/vocab/contractions.json")
-    dropped_gs = read_json_mapping("./data/vocab/contractions.json")
+    dropped_gs = read_json_mapping("./data/vocab/dropped_gs.json")
 
     # Initialize list of mapped
     # contractions
