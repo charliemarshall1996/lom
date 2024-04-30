@@ -1,6 +1,7 @@
 
-
+import os
 import logging
+import concurrent.futures
 import unicodedata
 
 from nltk import pos_tag, word_tokenize, WordNetLemmatizer
@@ -41,7 +42,7 @@ def filter_pos(tokens, kept_pos):
 def map_vocab(tokens):
 
     contractions = read_json_mapping("./data/vocab/contractions.json")
-    dropped_gs = read_json_mapping("./data/vocab/contractions.json")
+    dropped_gs = read_json_mapping("./data/vocab/dropped_gs.json")
 
     # Initialize list of mapped
     # contractions
@@ -70,7 +71,7 @@ def remove_pos_tags(tokens):
     return [token for token, _ in tokens]
 
 
-def clean_lyrics(series: pd.DataFrame, **kwargs):
+def clean_lyrics_series_to_list(series: pd.Series, **kwargs):
 
     # lowercase lyrics
     logger.info("Lowercasing lyrics...")
@@ -124,7 +125,7 @@ def clean_lyrics(series: pd.DataFrame, **kwargs):
     # remove whitespace
     logger.info("Removing whitespace...")
     whitespace_pattern = r"\s{2,}"
-    series = series.str.replace(whitespace_pattern, "", regex=True)
+    series = series.str.replace(whitespace_pattern, " ", regex=True)
     series = series.str.strip()
 
     # remove punctuation
@@ -171,3 +172,120 @@ def clean_lyrics(series: pd.DataFrame, **kwargs):
 
     logger.info("Finished cleaning lyrics!")
     return joined_lyrics, tokenized_lyrics
+
+
+def clean_lyrics_in_dataframe(i, df: pd.DataFrame, **kwargs):
+    print(f"Processing chunk {i}...")
+    # lowercase lyrics
+    logger.info("Lowercasing lyrics for chunk %s...", i)
+    df.lyrics = df.lyrics.str.lower()
+
+    df.dropna(how="any", inplace=True)
+    # normalize encoding
+    logger.info("Normalizing unicode for chunk %s...", i)
+    df.lyrics.apply(lambda x: unicodedata.normalize('NFKD', x))
+
+    # remove square brackets
+    if kwargs.get("remove_square_brackets", True):
+        logger.info("Removing square brackets for chunk %s...", i)
+        square_brackets_pattern = r"\[([^\[\]]*+(?:\[[^\[\]]*+])*+)\]"
+        df.lyrics = df.lyrics.str.replace(
+            square_brackets_pattern, "", regex=True)
+
+    # remove regular brackets
+    if kwargs.get("remove_regular_brackets", True):
+        logger.info("Removing regular brackets for chunk %s...", i)
+        regular_brackets_pattern = r"\([^)]*\)"
+        df.lyrics = df.lyrics.str.replace(
+            regular_brackets_pattern, "", regex=True)
+
+    # remove newline characters
+    logger.info("Removing newline characters for chunk %s...", i)
+    df.lyrics = df.lyrics.str.replace("\n", " ")
+
+    # remove carriage return characters
+    logger.info("Removing carriage return characters for chunk %s...", i)
+    df.lyrics = df.lyrics.str.replace("\r", " ")
+
+    # remove adlibs
+    if kwargs.get("remove_adlibs", True):
+        logger.info("Removing adlibs for chunk %s...", i)
+        adlibs = {'ah', 'aw', 'anh', 'ay', 'ayo', 'ayoh', 'aye',
+                  'br', 'da', 'dae', 'do', 'er', 'goh', 'he',
+                  'ho', 'lad', 'ladi', 'ladium', 'li', 'm',
+                  'mh', 'na', 'nah', 'naw', 'noh', 'nouh', 'sh', 'uh',
+                  'woah', 'wo' 'h', 'wo', 'unh', 'uho',
+                  'umah', 'yo', 'yuh'}
+        adlibs_pattern = r'\b(?:' + '|'.join(adlibs) + r')\b'
+        df.lyrics = df.lyrics.str.replace(adlibs_pattern, "", regex=True)
+
+        minimum_length_adlibs = {('\b[he]{3,}\b'), ('\b[hey]{4,}\b'), ('\b[i]{2,}\b'), ('\b[la]{3,}\b'),
+                                 ('\b[na]{3,}\b'), ('\b[no]{5,}\b'), ('\b[ops]{4,}\b'), ('\b[bra]{4,}\b')}
+        minimum_length_adlibs_pattern = fr"{'|'.join([sub_pattern for sub_pattern in minimum_length_adlibs])}"  # noqa
+        df.lyrics = df.lyrics.str.replace(
+            minimum_length_adlibs_pattern, "", regex=True)
+
+    # remove whitespace
+    logger.info("Removing whitespace for chunk %s...", i)
+    whitespace_pattern = r"\s{2,}"
+    df.lyrics = df.lyrics.str.replace(whitespace_pattern, " ", regex=True)
+    df.lyrics = df.lyrics.str.strip()
+
+    # remove punctuation
+    logger.info("Removing punctuation for chunk %s...", i)
+    punctuation_pattern = r"[^\w\s]"
+    df.lyrics = df.lyrics.str.replace(punctuation_pattern, "", regex=True)
+
+    # word tokenize
+    logger.info("Tokenizing lyrics for chunk %s...", i)
+    df.lyrics = df.lyrics.apply(word_tokenize)
+
+    # map vocabulary
+    if kwargs.get("map_vocab", True):
+        logger.info("Mapping vocabulary for chunk %s...", i)
+        df.lyrics = df.lyrics.apply(map_vocab)
+
+    # tag pos
+    if kwargs.get("filter_pos", True) or kwargs.get("pos_lemmatize", True):
+        logger.info("Tagging part-of-speech for chunk %s...", i)
+        df.lyrics = df.lyrics.apply(pos_tag)
+
+    # pos filter
+    if kwargs.get("filter_pos", True):
+        logger.info("Filtering part-of-speech for chunk %s...", i)
+        df.lyrics = df.lyrics.apply(
+            filter_pos, args=(kwargs.get("kept_pos", "N"),))
+
+        if not kwargs.get("pos_lemmatize", True):
+            df.lyrics = df.lyrics.apply(remove_pos_tags)
+
+    # pos lemmatize
+    if kwargs.get("pos_lemmatize", True):
+        logger.info("Lemmatizing part-of-speech for chunk %s...", i)
+        df.lyrics = df.lyrics.apply(pos_lemmatize)
+
+    # remove stopwords
+    if kwargs.get("remove_stopwords", True):
+        logger.info("Removing stopwords for chunk %s...", i)
+        df.lyrics = df.lyrics.apply(remove_stopwords)
+
+    print(f"Finished cleaning chunk {i}...")
+    return df
+
+
+if __name__ == "__main__":
+    with concurrent.futures.ProcessPoolExecutor(max_workers=3) as exc:
+        future_to_cleaned = []
+        for i, chunk in enumerate(pd.read_csv("./data/raw/song_lyrics.csv", chunksize=1000, encoding="utf-8-sig", encoding_errors="ignore")):
+            future_to_cleaned.append(exc.submit(
+                clean_lyrics_in_dataframe, i, chunk, remove_adlibs=False))
+
+        for future in concurrent.futures.as_completed(future_to_cleaned):
+            chunk = future.result()
+
+            if not os.path.exists("./data/processed/song_lyrics_processed.csv"):
+                chunk.to_csv("./data/processed/song_lyrics_processed.csv",
+                             encoding="utf-8-sig", errors="ignore", header=chunk.columns, mode="a")
+            else:
+                chunk.to_csv("./data/processed/song_lyrics_processed.csv",
+                             encoding="utf-8-sig", errors="ignore", mode="a")

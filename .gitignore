@@ -151,3 +151,4 @@ cython_debug/
 #  option (not recommended) you can uncomment the following to ignore the entire idea folder.
 #.idea/
 data/raw/song_lyrics.csv
+data/processed/song_lyrics_processed.csv
