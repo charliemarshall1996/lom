@@ -175,6 +175,9 @@ def clean_lyrics_series_to_list(series: pd.Series, **kwargs):
 
 
 def clean_lyrics_in_dataframe(i, df: pd.DataFrame, **kwargs):
+
+    df = df[df['language_cld3']]
+
     print(f"Processing chunk {i}...")
     # lowercase lyrics
     logger.info("Lowercasing lyrics for chunk %s...", i)

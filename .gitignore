@@ -152,3 +152,4 @@ cython_debug/
 #.idea/
 data/raw/song_lyrics.csv
 data/processed/song_lyrics_processed.csv
+models/full/

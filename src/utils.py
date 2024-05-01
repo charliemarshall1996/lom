@@ -38,8 +38,8 @@ def evaluate_lyrics(x):
         return None
 
 
-def load_dataset():
-    return pd.read_csv("./data/processed/song_lyrics_processed.csv", converters={'lyrics': evaluate_lyrics}, encoding="utf-8-sig", encoding_errors="ignore", low_memory=False, on_bad_lines='skip')
+def load_processed_dataset(path):
+    return pd.read_csv(path, converters={'lyrics': evaluate_lyrics}, encoding="utf-8-sig", encoding_errors="ignore")
 
 
 def load_genre_dataset(genre):
